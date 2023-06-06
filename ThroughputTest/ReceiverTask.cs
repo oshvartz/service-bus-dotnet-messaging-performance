@@ -11,6 +11,7 @@ namespace ThroughputTest
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -19,11 +20,13 @@ namespace ThroughputTest
     sealed class ReceiverTask : PerformanceTask
     {
         readonly List<Task> receivers;
+        readonly ServiceBusClient client;
 
         public ReceiverTask(Settings settings, Metrics metrics, CancellationToken cancellationToken)
             : base(settings, metrics, cancellationToken)
         {
             this.receivers = new List<Task>();
+            client = new ServiceBusClient(this.Settings.ConnectionString);
         }
 
         protected override Task OnOpenAsync()
@@ -46,11 +49,10 @@ namespace ThroughputTest
 
         async Task ReceiveTask(string path)
         {
-            var client = new ServiceBusClient(this.Settings.ConnectionString);
             var options = new ServiceBusReceiverOptions();
             options.ReceiveMode = this.Settings.ReceiveMode;
             options.PrefetchCount = Settings.PrefetchCount;
-            ServiceBusReceiver receiver = client.CreateReceiver(path, options);
+            var receiver = client.CreateReceiver(path, options);
             var semaphore = new DynamicSemaphoreSlim(this.Settings.MaxInflightReceives.Value + 1);
             var done = new SemaphoreSlim(1); done.Wait();
             var sw = Stopwatch.StartNew();
@@ -58,7 +60,7 @@ namespace ThroughputTest
             await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
             this.Settings.MaxInflightReceives.Changing += (a, e) => AdjustSemaphore(e, semaphore);
 
-            for (int j = 0; j < Settings.MessageCount && !this.CancellationToken.IsCancellationRequested; j ++)
+            for (int j = 0; j < Settings.MessageCount && !this.CancellationToken.IsCancellationRequested; j++)
             {
                 var receiveMetrics = new ReceiveMetrics() { Tick = sw.ElapsedTicks };
 
@@ -94,7 +96,7 @@ namespace ThroughputTest
                                 done.Release();
                             }
                         }
-                        else 
+                        else
                         {
                             receiveMetrics.Receives = receiveMetrics.Messages = 1;
                             nsec = sw.ElapsedTicks;
@@ -265,7 +267,7 @@ namespace ThroughputTest
                             }
                         }
                     }).Fork();
-                    
+
                 }
             }
             await done.WaitAsync();

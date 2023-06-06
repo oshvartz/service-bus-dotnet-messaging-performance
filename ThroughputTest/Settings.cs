@@ -25,7 +25,7 @@ namespace ThroughputTest
         [Option('R', "receive-paths", Required = false, HelpText = "Receive paths. Mandatory for receiving from topic subscriptions. Must be {topic}/subscriptions/{subscription-name} or {queue-name}")]
         public IEnumerable<string> ReceivePaths { get; set; }
 
-        [Option('n', "number-of-messages", Required = false, HelpText = "Number of messages to send (default 1000000)")]
+        [Option('n', "number-of-messages", Required = false, HelpText = "Number of messages to send (default 1000000) -1 means unlimited")]
         public long MessageCount { get; set; } = 1000000;
 
         [Option('b', "message-size-bytes", Required = false, HelpText = "Bytes per message (default 1024)")]

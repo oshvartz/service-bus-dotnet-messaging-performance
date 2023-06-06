@@ -19,11 +19,17 @@ namespace ThroughputTest
     sealed class SenderTask : PerformanceTask
     {
         readonly List<Task> senders;
+        //private readonly ServiceBusClient serviceBusClient;
+        private readonly ServiceBusSender sender;
+        private readonly byte[] payload;
 
         public SenderTask(Settings settings, Metrics metrics, CancellationToken cancellationToken)
             : base(settings, metrics, cancellationToken)
         {
             this.senders = new List<Task>();
+            var serviceBusClient = new ServiceBusClient(settings.ConnectionString);
+            sender = serviceBusClient.CreateSender(settings.SendPath);
+            payload = new byte[settings.MessageSizeInBytes];
         }
 
         protected override Task OnOpenAsync()
@@ -42,9 +48,6 @@ namespace ThroughputTest
 
         async Task SendTask()
         {
-            var client = new ServiceBusClient(this.Settings.ConnectionString);
-            ServiceBusSender sender = client.CreateSender(this.Settings.SendPath);
-            var payload = new byte[this.Settings.MessageSizeInBytes];
             var semaphore = new DynamicSemaphoreSlim(this.Settings.MaxInflightSends.Value);
             var done = new SemaphoreSlim(1);
             done.Wait();
@@ -56,70 +59,65 @@ namespace ThroughputTest
             // first send will fail out if the cxn string is bad
             await sender.SendMessageAsync(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) });
 
-            for (int j = 0; j < Settings.MessageCount && !this.CancellationToken.IsCancellationRequested; j++)
+            for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
             {
                 var sendMetrics = new SendMetrics() { Tick = sw.ElapsedTicks };
 
                 var nsec = sw.ElapsedTicks;
                 semaphore.Wait();
-                //await semaphore.WaitAsync().ConfigureAwait(false);
                 sendMetrics.InflightSends = this.Settings.MaxInflightSends.Value - semaphore.CurrentCount;
-                sendMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec; 
-                                
+                sendMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec;
+
                 if (Settings.SendDelay > 0)
                 {
                     await Task.Delay(Settings.SendDelay);
                 }
                 if (Settings.SendBatchCount <= 1)
                 {
-                    sender.SendMessageAsync(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) })
-                        .ContinueWith(async (t) =>
+                    try
+                    {
+                        await sender.SendMessageAsync(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) });
+                        sendMetrics.SendDuration100ns = sw.ElapsedTicks - nsec;
+                        sendMetrics.Sends = 1;
+                        sendMetrics.Messages = 1;
+                        semaphore.Release();
+                        Metrics.PushSendMetrics(sendMetrics);
+                        if (Settings.MessageCount != -1 && Interlocked.Increment(ref totalSends) >= Settings.MessageCount)
                         {
-                            if (t.IsFaulted || t.IsCanceled)
-                            {
-                                await HandleExceptions(semaphore, sendMetrics, t.Exception);
-                            }
-                            else
-                            {
-                                sendMetrics.SendDuration100ns = sw.ElapsedTicks - nsec;
-                                sendMetrics.Sends = 1;
-                                sendMetrics.Messages = 1;
-                                semaphore.Release();
-                                Metrics.PushSendMetrics(sendMetrics);
-                            }
-                            if (Interlocked.Increment(ref totalSends) >= Settings.MessageCount)
-                            {
-                                done.Release();
-                            }
-                        }).Fork();
+                            done.Release();
+                        }
+                    }
+
+                    catch (Exception ex)
+                    {
+                        await HandleExceptions(semaphore, sendMetrics, new AggregateException(ex));
+                    }
                 }
                 else
                 {
                     var batch = new List<ServiceBusMessage>();
-                    for (int i = 0; i < Settings.SendBatchCount && j < Settings.MessageCount && !this.CancellationToken.IsCancellationRequested; i++, j++)
+                    for (int i = 0; i < Settings.SendBatchCount && (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; i++, j++)
                     {
                         batch.Add(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) });
                     }
-                    sender.SendMessagesAsync(batch)
-                       .ContinueWith(async (t) =>
-                       {
-                           if (t.IsFaulted || t.IsCanceled)
-                           {
-                               await HandleExceptions(semaphore, sendMetrics, t.Exception);
-                           }
-                           else
-                           {
-                               sendMetrics.SendDuration100ns = sw.ElapsedTicks - nsec;
-                               sendMetrics.Sends = 1;
-                               sendMetrics.Messages = Settings.SendBatchCount;
-                               semaphore.Release();
-                               Metrics.PushSendMetrics(sendMetrics);
-                           }
-                           if (Interlocked.Increment(ref totalSends) >= Settings.MessageCount)
-                           {
-                               done.Release();
-                           }
-                       }).Fork();
+                    try
+                    {
+                        await sender.SendMessagesAsync(batch);
+                        sendMetrics.SendDuration100ns = sw.ElapsedTicks - nsec;
+                        sendMetrics.Sends = 1;
+                        sendMetrics.Messages = Settings.SendBatchCount;
+                        semaphore.Release();
+                        Metrics.PushSendMetrics(sendMetrics);
+                        if (Settings.MessageCount != -1 && Interlocked.Increment(ref totalSends) >= Settings.MessageCount)
+                        {
+                            done.Release();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await HandleExceptions(semaphore, sendMetrics, new AggregateException(ex));
+                    }
+
                 }
             }
             await done.WaitAsync();
