@@ -12,6 +12,7 @@ namespace ThroughputTest
     using System;
     using System.Linq;
     using Azure.Messaging.ServiceBus;
+    using System.Threading;
 
     class Program
     {
