@@ -37,7 +37,7 @@ namespace ThroughputTest
         [Option('m', "receive-mode", Required = false, HelpText = "Receive mode.'PeekLock' (default) or 'ReceiveAndDelete'")]
         public ServiceBusReceiveMode ReceiveMode { get; set; } = ServiceBusReceiveMode.PeekLock;
 
-        [Option('r', "receiver-count", Required = false, HelpText = "Number of concurrent receivers (default 1)")]
+        [Option('r', "receiver-count", Required = false, HelpText = "Number of concurrent receivers (default 1) - use -1 to use processor mode")]
         public int ReceiverCount { get; set; } = 5;
 
         [Option('e', "prefetch-count", Required = false, HelpText = "Prefetch count (default 0)")]
