@@ -81,7 +81,10 @@ namespace ThroughputTest
                         {
                             await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
                         }
-                        await receiver.CompleteMessageAsync(msg).ConfigureAwait(false);
+                        if (msg != null)
+                        {
+                            await receiver.CompleteMessageAsync(msg).ConfigureAwait(false);
+                        }
                         Metrics.PushReceiveMetrics(receiveMetrics);
                         semaphore.Release();
                         if (Settings.MessageCount != -1 && Interlocked.Increment(ref totalReceives) >= Settings.MessageCount)
