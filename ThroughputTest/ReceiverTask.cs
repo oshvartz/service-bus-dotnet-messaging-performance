@@ -58,7 +58,7 @@ namespace ThroughputTest
             await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
             this.Settings.MaxInflightReceives.Changing += (a, e) => AdjustSemaphore(e, semaphore);
 
-            for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j ++)
+            for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
             {
                 var receiveMetrics = new ReceiveMetrics() { Tick = sw.ElapsedTicks };
 
@@ -77,12 +77,14 @@ namespace ThroughputTest
                         receiveMetrics.Receives = receiveMetrics.Messages = 1;
                         nsec = sw.ElapsedTicks;
                         // simulate work by introducing a delay, if needed
-                        if (Settings.WorkDuration > 0)
-                        {
-                            await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
-                        }
                         if (msg != null)
                         {
+                            if (Settings.WorkDuration > 0)
+                            {
+                                await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration)).ConfigureAwait(false);
+                                await receiver.RenewMessageLockAsync(msg).ConfigureAwait(false);
+                            }
+
                             await receiver.CompleteMessageAsync(msg).ConfigureAwait(false);
                         }
                         Metrics.PushReceiveMetrics(receiveMetrics);
@@ -92,7 +94,7 @@ namespace ThroughputTest
                             done.Release();
                         }
                     }
-                    catch(Exception ex)
+                    catch (Exception ex)
                     {
                         receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
                         if (ex is ServiceBusException sbException && sbException.Reason == ServiceBusFailureReason.ServiceBusy)
@@ -245,7 +247,7 @@ namespace ThroughputTest
                             }
                         }
                     }).Fork();
-                    
+
                 }
             }
             await done.WaitAsync();
