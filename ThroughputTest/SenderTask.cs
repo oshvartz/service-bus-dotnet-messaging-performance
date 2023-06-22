@@ -22,14 +22,16 @@ namespace ThroughputTest
         //private readonly ServiceBusClient serviceBusClient;
         private readonly ServiceBusSender sender;
         private readonly byte[] payload;
+        private readonly SessionProvider sessionProvider;
 
-        public SenderTask(Settings settings, Metrics metrics, CancellationToken cancellationToken)
+        public SenderTask(Settings settings, Metrics metrics, SessionProvider sessionProvider, CancellationToken cancellationToken)
             : base(settings, metrics, cancellationToken)
         {
             this.senders = new List<Task>();
             var serviceBusClient = new ServiceBusClient(settings.ConnectionString);
             sender = serviceBusClient.CreateSender(settings.SendPath);
             payload = new byte[settings.MessageSizeInBytes];
+            this.sessionProvider = sessionProvider;
         }
 
         protected override Task OnOpenAsync()
@@ -57,7 +59,7 @@ namespace ThroughputTest
             var sw = Stopwatch.StartNew();
 
             // first send will fail out if the cxn string is bad
-            await sender.SendMessageAsync(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) });
+            await sender.SendMessageAsync(CreateMessage());
 
             for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
             {
@@ -76,7 +78,7 @@ namespace ThroughputTest
                 {
                     try
                     {
-                        await sender.SendMessageAsync(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) });
+                        await sender.SendMessageAsync(CreateMessage());
                         sendMetrics.SendDuration100ns = sw.ElapsedTicks - nsec;
                         sendMetrics.Sends = 1;
                         sendMetrics.Messages = 1;
@@ -98,7 +100,7 @@ namespace ThroughputTest
                     var batch = new List<ServiceBusMessage>();
                     for (int i = 0; i < Settings.SendBatchCount && (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; i++, j++)
                     {
-                        batch.Add(new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) });
+                        batch.Add(CreateMessage());
                     }
                     try
                     {
@@ -121,6 +123,11 @@ namespace ThroughputTest
                 }
             }
             await done.WaitAsync();
+        }
+
+        private ServiceBusMessage CreateMessage()
+        {
+            return new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) , SessionId = this.sessionProvider.IsEnabled ? this.sessionProvider.GetSession() : null };
         }
 
         static void AdjustSemaphore(Observable<int>.ChangingEventArgs e, DynamicSemaphoreSlim semaphore)

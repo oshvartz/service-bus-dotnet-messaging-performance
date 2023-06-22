@@ -38,9 +38,10 @@ namespace ThroughputTest
         public async Task Run(params Experiment[] experiments)
         {
             this.settings.PrintSettings();
+            var sessionProvider = new SessionProvider(this.settings.SessionsNumber);
 
             tasks.Add(new ReceiverTask(settings, this.metrics, this.cancellationTokenSource.Token));
-            tasks.Add(new SenderTask(settings, this.metrics, this.cancellationTokenSource.Token));
+            tasks.Add(new SenderTask(settings, this.metrics, sessionProvider, this.cancellationTokenSource.Token));
 
             Console.WriteLine("Starting...");
             Console.WriteLine();

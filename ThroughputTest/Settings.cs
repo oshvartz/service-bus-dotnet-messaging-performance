@@ -67,6 +67,9 @@ namespace ThroughputTest
         [Option('w', "receive-work-duration", Required = false, HelpText = "Work simulation delay between receive and completion (milliseconds, default 0, no work)")]
         public int WorkDuration { get; private set; } = 0;
 
+        [Option('x', "session number", Required = false, HelpText = "Sessions number - enabling session")]
+        public int SessionsNumber { get; private set; } = 0;
+
         public void PrintSettings()
         {
             Console.WriteLine("Settings:");
