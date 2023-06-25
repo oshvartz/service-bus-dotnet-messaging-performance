@@ -47,9 +47,11 @@ namespace ThroughputTest
         async Task ReceiveTask(string path)
         {
             var client = new ServiceBusClient(this.Settings.ConnectionString);
-            var options = new ServiceBusSessionReceiverOptions();
-            options.ReceiveMode = this.Settings.ReceiveMode;
-            options.PrefetchCount = Settings.PrefetchCount;
+            var options = new ServiceBusSessionReceiverOptions
+            {
+                ReceiveMode = Settings.ReceiveMode,
+                PrefetchCount = Settings.PrefetchCount,
+            };
 
             var semaphore = new DynamicSemaphoreSlim(this.Settings.MaxInflightReceives.Value + 1);
             var done = new SemaphoreSlim(1); done.Wait();
@@ -61,30 +63,34 @@ namespace ThroughputTest
             for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
             {
                 var receiveMetrics = new ReceiveMetrics() { Tick = sw.ElapsedTicks };
-                //receiveMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec;
+                var nsec = sw.ElapsedTicks;
+
+                receiveMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec;
+
                 try
                 {
                     var serviceBusSessionReceiver = await client.AcceptNextSessionAsync(path, options);
 
                     //todo: add timeout
-                    var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount,TimeSpan.FromSeconds(10));
+                    var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount, TimeSpan.FromSeconds(10));
 
-                   
+                    receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
+                    receiveMetrics.Receives = receiveMetrics.Messages = 1;
+                    nsec = sw.ElapsedTicks;
+
+                    var processTasts = new List<Task>();
                     foreach (var message in messages)
                     {
-                        if (Settings.WorkDuration > 0)
-                        {
-                            await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration)).ConfigureAwait(false);
-                        }
-                        await serviceBusSessionReceiver.CompleteMessageAsync(message);
+                        processTasts.Add(ProcessMessage(serviceBusSessionReceiver, message, semaphore));
                     }
+                    await Task.WhenAll(processTasts);
 
                     Metrics.PushReceiveMetrics(receiveMetrics);
                 }
                 catch (Exception ex)
                 {
 
-                   // receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
+                    // receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
                     if (ex is ServiceBusException sbException && sbException.Reason == ServiceBusFailureReason.ServiceBusy)
                     {
                         receiveMetrics.BusyErrors = 1;
@@ -99,14 +105,27 @@ namespace ThroughputTest
                     }
                     Metrics.PushReceiveMetrics(receiveMetrics);
                 }
-                finally
-                {
-                    semaphore.Release();
-                }
-
             }
 
             await done.WaitAsync();
+        }
+
+        private async Task ProcessMessage(ServiceBusSessionReceiver serviceBusSessionReceiver, ServiceBusReceivedMessage message, DynamicSemaphoreSlim semaphore)
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                if (Settings.WorkDuration > 0)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration)).ConfigureAwait(false);
+                }
+
+                await serviceBusSessionReceiver.CompleteMessageAsync(message);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
         }
 
         private Task Processor_ProcessErrorAsync(ProcessErrorEventArgs args)
