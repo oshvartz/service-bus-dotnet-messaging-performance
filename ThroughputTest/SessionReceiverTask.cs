@@ -19,11 +19,13 @@ namespace ThroughputTest
     sealed class SessionReceiverTask : PerformanceTask
     {
         readonly List<Task> receivers;
+        readonly ServiceBusClient client;
 
         public SessionReceiverTask(Settings settings, Metrics metrics, CancellationToken cancellationToken)
             : base(settings, metrics, cancellationToken)
         {
             this.receivers = new List<Task>();
+            this.client = new ServiceBusClient(this.Settings.ConnectionString);
         }
 
         protected override Task OnOpenAsync()
@@ -46,7 +48,7 @@ namespace ThroughputTest
 
         async Task ReceiveTask(string path)
         {
-            var client = new ServiceBusClient(this.Settings.ConnectionString);
+            
             var options = new ServiceBusSessionReceiverOptions
             {
                 ReceiveMode = Settings.ReceiveMode,
@@ -59,17 +61,16 @@ namespace ThroughputTest
             await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
             this.Settings.MaxInflightReceives.Changing += (a, e) => AdjustSemaphore(e, semaphore);
 
-
             for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
             {
                 var receiveMetrics = new ReceiveMetrics() { Tick = sw.ElapsedTicks };
                 var nsec = sw.ElapsedTicks;
 
                 receiveMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec;
-
+                ServiceBusSessionReceiver serviceBusSessionReceiver = null;
                 try
                 {
-                    var serviceBusSessionReceiver = await client.AcceptNextSessionAsync(path, options);
+                    serviceBusSessionReceiver = await client.AcceptNextSessionAsync(path, options);
 
                     //todo: add timeout
                     var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount, TimeSpan.FromSeconds(10));
@@ -104,6 +105,13 @@ namespace ThroughputTest
                         receiveMetrics.Errors = 1;
                     }
                     Metrics.PushReceiveMetrics(receiveMetrics);
+                }
+                finally
+                {
+                    if (serviceBusSessionReceiver != null)
+                    {
+                        await serviceBusSessionReceiver.DisposeAsync();
+                    }
                 }
             }
 
