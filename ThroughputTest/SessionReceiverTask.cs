@@ -73,18 +73,18 @@ namespace ThroughputTest
                     serviceBusSessionReceiver = await client.AcceptNextSessionAsync(path, options);
 
                     //todo: add timeout
-                    var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount, TimeSpan.FromSeconds(10));
+                    var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount, TimeSpan.FromSeconds(30));
 
                     receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
                     receiveMetrics.Receives = receiveMetrics.Messages = 1;
                     nsec = sw.ElapsedTicks;
 
-                    var processTasts = new List<Task>();
+                    var processTasks = new List<Task>();
                     foreach (var message in messages)
                     {
-                        processTasts.Add(ProcessMessage(serviceBusSessionReceiver, message, semaphore));
+                        processTasks.Add(ProcessMessage(serviceBusSessionReceiver, message, semaphore));
                     }
-                    await Task.WhenAll(processTasts);
+                    await Task.WhenAll(processTasks);
 
                     Metrics.PushReceiveMetrics(receiveMetrics);
                 }
