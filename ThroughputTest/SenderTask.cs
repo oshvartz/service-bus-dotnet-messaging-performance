@@ -32,6 +32,7 @@ namespace ThroughputTest
             sender = serviceBusClient.CreateSender(settings.SendPath);
             payload = new byte[settings.MessageSizeInBytes];
             this.sessionProvider = sessionProvider;
+
         }
 
         protected override Task OnOpenAsync()
@@ -127,7 +128,14 @@ namespace ThroughputTest
 
         private ServiceBusMessage CreateMessage()
         {
-            return new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(5) , SessionId = this.sessionProvider.IsEnabled ? this.sessionProvider.GetSession() : null };
+            if (Settings.MessageTimeToLiveMinutes != 0)
+            {
+                return new ServiceBusMessage(payload) { TimeToLive = TimeSpan.FromMinutes(Settings.MessageTimeToLiveMinutes), SessionId = this.sessionProvider.IsEnabled ? this.sessionProvider.GetSession() : null };
+            }
+            else
+            {
+                return new ServiceBusMessage(payload) { SessionId = this.sessionProvider.IsEnabled ? this.sessionProvider.GetSession() : null };
+            }
         }
 
         static void AdjustSemaphore(Observable<int>.ChangingEventArgs e, DynamicSemaphoreSlim semaphore)

@@ -70,6 +70,9 @@ namespace ThroughputTest
         [Option('x', "session number", Required = false, HelpText = "Sessions number - enabling session")]
         public int SessionsNumber { get; private set; } = 0;
 
+        [Option('l', "message ttl", Required = false, HelpText = "Message time to live in minutes")]
+        public int MessageTimeToLiveMinutes { get; private set; } = 0;
+
         public void PrintSettings()
         {
             Console.WriteLine("Settings:");
