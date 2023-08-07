@@ -38,9 +38,17 @@ namespace ThroughputTest
             var receiverPaths = this.Settings.ReceivePaths;
             foreach (var receiverPath in receiverPaths)
             {
-                for (int i = 0; i < this.Settings.ReceiverCount; i++)
+                //processor mode
+                if (Settings.ReceiverCount == -1)
                 {
                     this.receivers.Add(Task.Run(() => ReceiveTask(receiverPath)));
+                }
+                else
+                {
+                    for (int i = 0; i < this.Settings.ReceiverCount; i++)
+                    {
+                        this.receivers.Add(Task.Run(() => ReceiveTask(receiverPath)));
+                    }
                 }
             }
             return Task.WhenAll(this.receivers);
@@ -48,75 +56,96 @@ namespace ThroughputTest
 
         async Task ReceiveTask(string path)
         {
-            
+            var done = new SemaphoreSlim(1); done.Wait();
             var options = new ServiceBusSessionReceiverOptions
             {
                 ReceiveMode = Settings.ReceiveMode,
                 PrefetchCount = Settings.PrefetchCount,
             };
 
-            var semaphore = new DynamicSemaphoreSlim(this.Settings.MaxInflightReceives.Value + 1);
-            var done = new SemaphoreSlim(1); done.Wait();
-            var sw = Stopwatch.StartNew();
-            await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
-            this.Settings.MaxInflightReceives.Changing += (a, e) => AdjustSemaphore(e, semaphore);
-
-            for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
+            if (Settings.ReceiverCount == -1)
             {
-                var receiveMetrics = new ReceiveMetrics() { Tick = sw.ElapsedTicks };
-                var nsec = sw.ElapsedTicks;
-
-                receiveMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec;
-                ServiceBusSessionReceiver serviceBusSessionReceiver = null;
-                try
+                var serviceBusProcessorOptions = new ServiceBusSessionProcessorOptions
                 {
-                    serviceBusSessionReceiver = await client.AcceptNextSessionAsync(path, options);
+                    //MaxConcurrentCallsPerSession = 1,
+                    MaxConcurrentSessions = Settings.MaxInflightReceives.Value,
+                    ReceiveMode = Settings.ReceiveMode,
+                    MaxAutoLockRenewalDuration = TimeSpan.FromMilliseconds(Settings.WorkDuration) + TimeSpan.FromSeconds(5),
+                };
 
-                    //todo: add timeout
-                    var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount, TimeSpan.FromSeconds(30));
+                var processor = client.CreateSessionProcessor(path, serviceBusProcessorOptions);
+                processor.ProcessMessageAsync += Processor_ProcessMessageAsync;
+                processor.ProcessErrorAsync += Processor_ProcessErrorAsync;
 
-                    receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
-                    receiveMetrics.Receives = receiveMetrics.Messages = 1;
-                    nsec = sw.ElapsedTicks;
+                await processor.StartProcessingAsync().ConfigureAwait(false);
 
-                    var processTasks = new List<Task>();
-                    foreach (var message in messages)
-                    {
-                        processTasks.Add(ProcessMessage(serviceBusSessionReceiver, message, semaphore));
-                    }
-                    await Task.WhenAll(processTasks);
+            }
+            else
+            {
 
-                    Metrics.PushReceiveMetrics(receiveMetrics);
-                }
-                catch (Exception ex)
+                var semaphore = new DynamicSemaphoreSlim(this.Settings.MaxInflightReceives.Value + 1);
+                var sw = Stopwatch.StartNew();
+                this.Settings.MaxInflightReceives.Changing += (a, e) => AdjustSemaphore(e, semaphore);
+
+                for (int j = 0; (Settings.MessageCount == -1 || j < Settings.MessageCount) && !this.CancellationToken.IsCancellationRequested; j++)
                 {
+                    var receiveMetrics = new ReceiveMetrics() { Tick = sw.ElapsedTicks };
+                    var nsec = sw.ElapsedTicks;
 
-                    // receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
-                    if (ex is ServiceBusException sbException && sbException.Reason == ServiceBusFailureReason.ServiceBusy)
+                    receiveMetrics.GateLockDuration100ns = sw.ElapsedTicks - nsec;
+                    ServiceBusSessionReceiver serviceBusSessionReceiver = null;
+                    try
                     {
-                        receiveMetrics.BusyErrors = 1;
-                        if (!this.CancellationToken.IsCancellationRequested)
+                        serviceBusSessionReceiver = await client.AcceptNextSessionAsync(path, options);
+
+                        //todo: add timeout
+                        var messages = await serviceBusSessionReceiver.ReceiveMessagesAsync(Settings.ReceiveBatchCount, TimeSpan.FromSeconds(30));
+
+                        receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
+                        receiveMetrics.Receives = receiveMetrics.Messages = 1;
+                        nsec = sw.ElapsedTicks;
+
+                        var processTasks = new List<Task>();
+                        foreach (var message in messages)
                         {
-                            await Task.Delay(3000, this.CancellationToken).ConfigureAwait(false);
+                            processTasks.Add(ProcessMessage(serviceBusSessionReceiver, message, semaphore));
                         }
+                        await Task.WhenAll(processTasks);
+
+                        Metrics.PushReceiveMetrics(receiveMetrics);
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        receiveMetrics.Errors = 1;
+
+                        // receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
+                        if (ex is ServiceBusException sbException && sbException.Reason == ServiceBusFailureReason.ServiceBusy)
+                        {
+                            receiveMetrics.BusyErrors = 1;
+                            if (!this.CancellationToken.IsCancellationRequested)
+                            {
+                                await Task.Delay(3000, this.CancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                        else
+                        {
+                            receiveMetrics.Errors = 1;
+                        }
+                        Metrics.PushReceiveMetrics(receiveMetrics);
                     }
-                    Metrics.PushReceiveMetrics(receiveMetrics);
-                }
-                finally
-                {
-                    if (serviceBusSessionReceiver != null)
+                    finally
                     {
-                        await serviceBusSessionReceiver.DisposeAsync();
+                        if (serviceBusSessionReceiver != null)
+                        {
+                            await serviceBusSessionReceiver.DisposeAsync();
+                        }
                     }
                 }
             }
 
             await done.WaitAsync();
         }
+
+
 
         private async Task ProcessMessage(ServiceBusSessionReceiver serviceBusSessionReceiver, ServiceBusReceivedMessage message, DynamicSemaphoreSlim semaphore)
         {
@@ -136,6 +165,8 @@ namespace ThroughputTest
             }
         }
 
+
+
         private Task Processor_ProcessErrorAsync(ProcessErrorEventArgs args)
         {
             var receiveMetrics = new ReceiveMetrics
@@ -146,19 +177,33 @@ namespace ThroughputTest
             return Task.CompletedTask;
         }
 
-        private async Task Processor_ProcessMessageAsync(ProcessMessageEventArgs arg)
+        private async Task Processor_ProcessMessageAsync(ProcessSessionMessageEventArgs arg)
         {
             var receiveMetrics = new ReceiveMetrics
             {
                 CompleteCalls = 1
             };
+
+            var processorTasks = new List<Task>() { ProcessProcessorMessage(arg, arg.Message) };
+            var msgs = await arg.GetReceiveActions().ReceiveMessagesAsync(Settings.ReceiveBatchCount - 1, TimeSpan.FromSeconds(30));
+
+            foreach (var msg in msgs)
+            {
+                receiveMetrics.CompleteCalls++;
+                processorTasks.Add(ProcessProcessorMessage(arg,msg));
+            }
+            await Task.WhenAll(processorTasks);
+            Metrics.PushReceiveMetrics(receiveMetrics);
+        }
+
+
+        private async Task ProcessProcessorMessage(ProcessSessionMessageEventArgs serviceBusSessionReceiver, ServiceBusReceivedMessage message)
+        {
             if (Settings.WorkDuration > 0)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration));
+                await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration)).ConfigureAwait(false);
             }
-            await arg.CompleteMessageAsync(arg.Message).ConfigureAwait(false);
-
-            Metrics.PushReceiveMetrics(receiveMetrics);
+            await serviceBusSessionReceiver.CompleteMessageAsync(message);
         }
 
         static void AdjustSemaphore(Observable<int>.ChangingEventArgs e, DynamicSemaphoreSlim semaphore)

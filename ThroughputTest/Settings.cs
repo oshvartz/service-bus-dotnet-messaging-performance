@@ -92,6 +92,8 @@ namespace ThroughputTest
             Console.WriteLine("{0}: {1}", "WorkDuration", this.WorkDuration);
             Console.WriteLine("{0}: {1}", "MessageTimeToLiveMinutes", this.MessageTimeToLiveMinutes);
             Console.WriteLine("{0}: {1}", "SessionsNumber", this.SessionsNumber);
+            Console.WriteLine("{0}: {1}", "SendDelay", this.SendDelay);
+            Console.WriteLine("{0}: {1}", "PrefetchCount", this.PrefetchCount);
 
             Console.WriteLine();
         }
