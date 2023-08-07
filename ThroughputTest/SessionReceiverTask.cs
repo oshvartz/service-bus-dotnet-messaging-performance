@@ -70,6 +70,7 @@ namespace ThroughputTest
                     //MaxConcurrentCallsPerSession = 1,
                     MaxConcurrentSessions = Settings.MaxInflightReceives.Value,
                     ReceiveMode = Settings.ReceiveMode,
+                    PrefetchCount = Settings.PrefetchCount,
                     MaxAutoLockRenewalDuration = TimeSpan.FromMilliseconds(Settings.WorkDuration) + TimeSpan.FromSeconds(5),
                 };
 
