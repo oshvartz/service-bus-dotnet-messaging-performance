@@ -39,7 +39,7 @@ namespace ThroughputTest
             foreach (var receiverPath in receiverPaths)
             {
                 //processor mode
-                if (Settings.ReceiverCount == -1)
+                if (Settings.ReceiverCount == Settings.RECVICER_PROCESSOR_MODE)
                 {
                     this.receivers.Add(Task.Run(() => ReceiveTask(receiverPath)));
                 }
@@ -63,7 +63,7 @@ namespace ThroughputTest
                 PrefetchCount = Settings.PrefetchCount,
             };
 
-            if (Settings.ReceiverCount == -1)
+            if (Settings.ReceiverCount == Settings.RECVICER_PROCESSOR_MODE)
             {
                 var serviceBusProcessorOptions = new ServiceBusSessionProcessorOptions
                 {

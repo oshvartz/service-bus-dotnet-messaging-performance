@@ -36,7 +36,7 @@ namespace ThroughputTest
             var receiverPaths = this.Settings.ReceivePaths;
             foreach (var receiverPath in receiverPaths)
             {
-                if (this.Settings.ReceiverCount == -1)
+                if (this.Settings.ReceiverCount == Settings.RECVICER_PROCESSOR_MODE) 
                 {
                     this.receivers.Add(Task.Run(() => ReceiveTask(receiverPath)));
 

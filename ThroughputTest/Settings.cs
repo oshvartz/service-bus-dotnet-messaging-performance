@@ -16,6 +16,8 @@ namespace ThroughputTest
 
     class Settings
     {
+        public const int RECVICER_PROCESSOR_MODE = -1;
+
         [Option('C', "connection-string", Required = true, HelpText = "Connection string")]
         public string ConnectionString { get; set; }
 
@@ -84,7 +86,7 @@ namespace ThroughputTest
             Console.WriteLine("{0}: {1}", "SendBatchCount", this.SendBatchCount);
             Console.WriteLine("{0}: {1}", "MaxInflightSends", this.CfgMaxInflightSends);
             Console.WriteLine("{0}: {1}", "ReceiveMode", this.ReceiveMode);
-            Console.WriteLine("{0}: {1}", "ReceiverCount", this.ReceiverCount);
+            Console.WriteLine("{0}: {1}", "ReceiverCount", this.ReceiverCount == RECVICER_PROCESSOR_MODE ? "Processor Mode" : ReceiverCount);
             Console.WriteLine("{0}: {1}", "ReceiveBatchCount", this.ReceiveBatchCount);
             Console.WriteLine("{0}: {1}", "ReceiveMode", this.ReceiveMode);
             Console.WriteLine("{0}: {1}", "MaxInflightReceives", this.CfgMaxInflightReceives);
