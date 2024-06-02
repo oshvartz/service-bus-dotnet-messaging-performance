@@ -186,14 +186,20 @@ namespace ThroughputTest
             };
 
             var processorTasks = new List<Task>() { ProcessProcessorMessage(arg, arg.Message) };
-            var msgs = await arg.GetReceiveActions().ReceiveMessagesAsync(Settings.ReceiveBatchCount - 1, TimeSpan.FromSeconds(30));
-
-            foreach (var msg in msgs)
+            //read the rest of the messages in session
+            if (Settings.ReceiveBatchCount > 2)
             {
-                receiveMetrics.CompleteCalls++;
-                processorTasks.Add(ProcessProcessorMessage(arg,msg));
+                var msgs = await arg.GetReceiveActions().ReceiveMessagesAsync(Settings.ReceiveBatchCount - 1, TimeSpan.FromSeconds(30));
+
+                foreach (var msg in msgs)
+                {
+                    receiveMetrics.CompleteCalls++;
+                    processorTasks.Add(ProcessProcessorMessage(arg, msg));
+                }
             }
             await Task.WhenAll(processorTasks);
+            arg.ReleaseSession();
+            receiveMetrics.Receives = receiveMetrics.Messages = receiveMetrics.CompleteCalls;
             Metrics.PushReceiveMetrics(receiveMetrics);
         }
 
