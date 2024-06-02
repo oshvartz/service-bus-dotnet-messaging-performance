@@ -180,9 +180,11 @@ namespace ThroughputTest
 
         private async Task Processor_ProcessMessageAsync(ProcessSessionMessageEventArgs arg)
         {
+            var sw = Stopwatch.StartNew();
             var receiveMetrics = new ReceiveMetrics
             {
-                CompleteCalls = 1
+                CompleteCalls = 1,
+                Tick = sw.ElapsedTicks
             };
 
             var processorTasks = new List<Task>() { ProcessProcessorMessage(arg, arg.Message) };
@@ -199,6 +201,7 @@ namespace ThroughputTest
             }
             await Task.WhenAll(processorTasks);
             arg.ReleaseSession();
+            sw.Stop();
             receiveMetrics.Receives = receiveMetrics.Messages = receiveMetrics.CompleteCalls;
             Metrics.PushReceiveMetrics(receiveMetrics);
         }

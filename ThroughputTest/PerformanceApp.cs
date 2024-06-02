@@ -80,7 +80,7 @@ namespace ThroughputTest
                     }
                 });
             }
-            if (this.settings.ReceiverCount > 0)
+            if (this.settings.ReceiverCount > 0 || this.settings.ReceiverCount == Settings.RECVICER_PROCESSOR_MODE)
             {
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.Write("R|{0,10:0.00}|{1,10:0.00}|{2,5}|{3,5}|", "pstart", "pend", "rbc", "mifr");
