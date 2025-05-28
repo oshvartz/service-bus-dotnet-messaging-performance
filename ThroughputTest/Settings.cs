@@ -75,6 +75,9 @@ namespace ThroughputTest
         [Option('l', "message ttl", Required = false, HelpText = "Message time to live in minutes")]
         public int MessageTimeToLiveMinutes { get; private set; } = 0;
 
+        [Option('z', "session-state-bytes", Required = false, HelpText = "Size of the session state in bytes to set (default 0, feature disabled if 0)")]
+        public int SessionStateSizeBytes { get; private set; } = 0;
+
         public void PrintSettings()
         {
             Console.WriteLine("Settings:");
@@ -94,6 +97,7 @@ namespace ThroughputTest
             Console.WriteLine("{0}: {1}", "WorkDuration", this.WorkDuration);
             Console.WriteLine("{0}: {1}", "MessageTimeToLiveMinutes", this.MessageTimeToLiveMinutes);
             Console.WriteLine("{0}: {1}", "SessionsNumber", this.SessionsNumber);
+            Console.WriteLine("{0}: {1}", "SessionStateSizeBytes", this.SessionStateSizeBytes);
             Console.WriteLine("{0}: {1}", "SendDelay", this.SendDelay);
             Console.WriteLine("{0}: {1}", "PrefetchCount", this.PrefetchCount);
 
