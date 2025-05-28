@@ -156,7 +156,13 @@ namespace ThroughputTest
                 // Read session state if enabled
                 if (Settings.SessionStateSizeBytes > 0)
                 {
-                    _ = await serviceBusSessionReceiver.GetSessionStateAsync(CancellationToken.None);
+                    var currentState = await serviceBusSessionReceiver.GetSessionStateAsync(CancellationToken.None);
+                    
+                    // Validate session state size if state exists
+                    if (currentState != null && currentState.ToArray().Length != Settings.SessionStateSizeBytes)
+                    {
+                        throw new Exception($"Session state size mismatch. Expected: {Settings.SessionStateSizeBytes}, Actual: {currentState.ToArray().Length}");
+                    }
                 }
 
                 if (Settings.WorkDuration > 0)
@@ -224,7 +230,13 @@ namespace ThroughputTest
             // Read session state if enabled
             if (Settings.SessionStateSizeBytes > 0)
             {
-                _ = await serviceBusSessionReceiver.GetSessionStateAsync(CancellationToken.None);
+                var currentState = await serviceBusSessionReceiver.GetSessionStateAsync(CancellationToken.None);
+                
+                // Validate session state size if state exists
+                if (currentState != null && currentState.ToArray().Length != Settings.SessionStateSizeBytes)
+                {
+                    throw new Exception($"Session state size mismatch. Expected: {Settings.SessionStateSizeBytes}, Actual: {currentState.ToArray().Length}");
+                }
             }
 
             if (Settings.WorkDuration > 0)
