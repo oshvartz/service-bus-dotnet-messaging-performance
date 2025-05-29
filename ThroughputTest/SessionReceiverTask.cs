@@ -153,9 +153,27 @@ namespace ThroughputTest
             await semaphore.WaitAsync();
             try
             {
+                // Read session state if enabled
+                if (Settings.SessionStateSizeBytes > 0)
+                {
+                    var currentState = await serviceBusSessionReceiver.GetSessionStateAsync(CancellationToken.None);
+                    
+                    // Validate session state size if state exists
+                    if (currentState != null && currentState.ToArray().Length != Settings.SessionStateSizeBytes)
+                    {
+                        throw new Exception($"Session state size mismatch. Expected: {Settings.SessionStateSizeBytes}, Actual: {currentState.ToArray().Length}");
+                    }
+                }
+
                 if (Settings.WorkDuration > 0)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration)).ConfigureAwait(false);
+                }
+                // Set session state if enabled
+                if (Settings.SessionStateSizeBytes > 0)
+                {
+                    byte[] newStateData = new byte[Settings.SessionStateSizeBytes];
+                    await serviceBusSessionReceiver.SetSessionStateAsync(new BinaryData(newStateData), CancellationToken.None);
                 }
 
                 await serviceBusSessionReceiver.CompleteMessageAsync(message);
@@ -209,9 +227,27 @@ namespace ThroughputTest
 
         private async Task ProcessProcessorMessage(ProcessSessionMessageEventArgs serviceBusSessionReceiver, ServiceBusReceivedMessage message)
         {
+            // Read session state if enabled
+            if (Settings.SessionStateSizeBytes > 0)
+            {
+                var currentState = await serviceBusSessionReceiver.GetSessionStateAsync(CancellationToken.None);
+                
+                // Validate session state size if state exists
+                if (currentState != null && currentState.ToArray().Length != Settings.SessionStateSizeBytes)
+                {
+                    throw new Exception($"Session state size mismatch. Expected: {Settings.SessionStateSizeBytes}, Actual: {currentState.ToArray().Length}");
+                }
+            }
+
             if (Settings.WorkDuration > 0)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(Settings.WorkDuration)).ConfigureAwait(false);
+            }
+            // Set session state if enabled
+            if (Settings.SessionStateSizeBytes > 0)
+            {
+                byte[] newStateData = new byte[Settings.SessionStateSizeBytes];
+                await serviceBusSessionReceiver.SetSessionStateAsync(new BinaryData(newStateData), CancellationToken.None);
             }
             await serviceBusSessionReceiver.CompleteMessageAsync(message);
         }
