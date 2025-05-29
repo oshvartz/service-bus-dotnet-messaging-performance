@@ -15,6 +15,7 @@ namespace ThroughputTest
     using System.Threading;
     using System.Threading.Tasks;
     using Azure.Messaging.ServiceBus;
+    using Azure.Identity;
 
     sealed class SessionReceiverTask : PerformanceTask
     {
@@ -25,7 +26,17 @@ namespace ThroughputTest
             : base(settings, metrics, cancellationToken)
         {
             this.receivers = new List<Task>();
-            this.client = new ServiceBusClient(this.Settings.ConnectionString);
+            
+            if (!string.IsNullOrWhiteSpace(this.Settings.ServiceBusNamespace))
+            {
+                // Use Entra ID authentication with DefaultAzureCredential
+                this.client = new ServiceBusClient(this.Settings.ServiceBusNamespace, new DefaultAzureCredential());
+            }
+            else
+            {
+                // Use connection string authentication
+                this.client = new ServiceBusClient(this.Settings.ConnectionString);
+            }
         }
 
         protected override Task OnOpenAsync()
@@ -117,7 +128,7 @@ namespace ThroughputTest
                     }
                     catch (Exception ex)
                     {
-
+                        Console.WriteLine($"Error receiving messages from session {path}: {ex.Message}");
                         // receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
                         if (ex is ServiceBusException sbException && sbException.Reason == ServiceBusFailureReason.ServiceBusy)
                         {

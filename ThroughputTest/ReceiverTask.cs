@@ -15,6 +15,7 @@ namespace ThroughputTest
     using System.Threading;
     using System.Threading.Tasks;
     using Azure.Messaging.ServiceBus;
+    using Azure.Identity;
 
     sealed class ReceiverTask : PerformanceTask
     {
@@ -54,7 +55,18 @@ namespace ThroughputTest
 
         async Task ReceiveTask(string path)
         {
-            var client = new ServiceBusClient(this.Settings.ConnectionString);
+            ServiceBusClient client;
+            if (!string.IsNullOrWhiteSpace(this.Settings.ServiceBusNamespace))
+            {
+                // Use Entra ID authentication with DefaultAzureCredential
+                client = new ServiceBusClient(this.Settings.ServiceBusNamespace, new DefaultAzureCredential());
+            }
+            else
+            {
+                // Use connection string authentication
+                client = new ServiceBusClient(this.Settings.ConnectionString);
+            }
+            
             var options = new ServiceBusReceiverOptions();
             options.ReceiveMode = this.Settings.ReceiveMode;
             options.PrefetchCount = Settings.PrefetchCount;

@@ -13,13 +13,17 @@ namespace ThroughputTest
     using CommandLine;
     using CommandLine.Text;
     using Azure.Messaging.ServiceBus;
+    using Azure.Identity;
 
     class Settings
     {
         public const int RECVICER_PROCESSOR_MODE = -1;
 
-        [Option('C', "connection-string", Required = true, HelpText = "Connection string")]
+        [Option('C', "connection-string", Required = false, HelpText = "Connection string")]
         public string ConnectionString { get; set; }
+
+        [Option('N', "sb-namespace", Required = false, HelpText = "Service Bus namespace (e.g., 'yournamespace.servicebus.windows.net') for Entra ID authentication")]
+        public string ServiceBusNamespace { get; set; }
 
         [Option('S', "send-path", Required = false, HelpText = "Send path. Queue or topic name, unless set in connection string EntityPath.")]
         public string SendPath { get; set; }
@@ -81,6 +85,16 @@ namespace ThroughputTest
         public void PrintSettings()
         {
             Console.WriteLine("Settings:");
+            if (!string.IsNullOrWhiteSpace(this.ServiceBusNamespace))
+            {
+                Console.WriteLine("{0}: {1}", "ServiceBusNamespace", this.ServiceBusNamespace);
+                Console.WriteLine("{0}: {1}", "AuthMethod", "Entra ID (DefaultAzureCredential)");
+            }
+            else
+            {
+                Console.WriteLine("{0}: {1}", "ConnectionString", "***");
+                Console.WriteLine("{0}: {1}", "AuthMethod", "Connection String");
+            }
             Console.WriteLine("{0}: {1}", "ReceivePaths", string.Join(",", this.ReceivePaths));
             Console.WriteLine("{0}: {1}", "SendPaths", this.SendPath);
             Console.WriteLine("{0}: {1}", "MessageCount", this.MessageCount);
@@ -109,8 +123,10 @@ namespace ThroughputTest
         {
             get
             {
-                yield return new Example("queue scenario", new Settings { ConnectionString = "{Connection-String-with-EntityPath}" });
-                yield return new Example("topic scenario", new Settings { ConnectionString = "{Connection-String}", SendPath = "{Topic-Name}", ReceivePaths = new string[] { "{Topic-Name}/subscriptions/{Subscription-Name-1}", "{Topic-Name}/subscriptions/{Subscription-Name-2}" } });
+                yield return new Example("queue scenario with connection string", new Settings { ConnectionString = "{Connection-String-with-EntityPath}" });
+                yield return new Example("topic scenario with connection string", new Settings { ConnectionString = "{Connection-String}", SendPath = "{Topic-Name}", ReceivePaths = new string[] { "{Topic-Name}/subscriptions/{Subscription-Name-1}", "{Topic-Name}/subscriptions/{Subscription-Name-2}" } });
+                yield return new Example("queue scenario with Entra ID", new Settings { ServiceBusNamespace = "{yournamespace.servicebus.windows.net}", SendPath = "{Queue-Name}" });
+                yield return new Example("topic scenario with Entra ID", new Settings { ServiceBusNamespace = "{yournamespace.servicebus.windows.net}", SendPath = "{Topic-Name}", ReceivePaths = new string[] { "{Topic-Name}/subscriptions/{Subscription-Name-1}", "{Topic-Name}/subscriptions/{Subscription-Name-2}" } });
             }
         }
     }

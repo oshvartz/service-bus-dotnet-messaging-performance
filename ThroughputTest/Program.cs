@@ -26,24 +26,53 @@ namespace ThroughputTest
         
         static void RunOptionsAndReturnExitCode(Settings settings)
         {
-            ServiceBusConnectionStringProperties cb = ServiceBusConnectionStringProperties.Parse(settings.ConnectionString);
-            if (string.IsNullOrWhiteSpace(cb.EntityPath))
+            // Validate authentication parameters
+            if (string.IsNullOrWhiteSpace(settings.ServiceBusNamespace) && string.IsNullOrWhiteSpace(settings.ConnectionString))
             {
+                Console.WriteLine("Error: Either --sb-namespace or --connection-string must be provided.");
+                result = 1;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.ServiceBusNamespace) && !string.IsNullOrWhiteSpace(settings.ConnectionString))
+            {
+                Console.WriteLine("Error: --sb-namespace and --connection-string cannot be used together. Please provide one or the other.");
+                result = 1;
+                return;
+            }
+
+            // Handle ServiceBus namespace authentication (Entra ID)
+            if (!string.IsNullOrWhiteSpace(settings.ServiceBusNamespace))
+            {
+                // When using namespace auth, SendPath must be explicitly set
                 if (string.IsNullOrWhiteSpace(settings.SendPath))
                 {
-                    Console.WriteLine("--send-path option must be specified if there's no EntityPath in the connection string.");
+                    Console.WriteLine("--send-path option must be specified when using --sb-namespace.");
                     result = 1;
                     return;
                 }
             }
-            else
+            else // Handle connection string authentication
             {
-                if (string.IsNullOrWhiteSpace(settings.SendPath))
+                ServiceBusConnectionStringProperties cb = ServiceBusConnectionStringProperties.Parse(settings.ConnectionString);
+                if (string.IsNullOrWhiteSpace(cb.EntityPath))
                 {
-                    settings.SendPath = cb.EntityPath;
+                    if (string.IsNullOrWhiteSpace(settings.SendPath))
+                    {
+                        Console.WriteLine("--send-path option must be specified if there's no EntityPath in the connection string.");
+                        result = 1;
+                        return;
+                    }
                 }
-                
-                settings.ConnectionString = cb.ToString(); 
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(settings.SendPath))
+                    {
+                        settings.SendPath = cb.EntityPath;
+                    }
+                    
+                    settings.ConnectionString = cb.ToString();
+                }
             }
             if (settings.ReceivePaths == null || settings.ReceivePaths.Count() == 0)
             {

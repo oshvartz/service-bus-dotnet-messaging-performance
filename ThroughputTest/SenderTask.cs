@@ -15,6 +15,7 @@ namespace ThroughputTest
     using System.Threading.Tasks;
     using System.Net.Sockets;
     using Azure.Messaging.ServiceBus;
+    using Azure.Identity;
 
     sealed class SenderTask : PerformanceTask
     {
@@ -28,11 +29,22 @@ namespace ThroughputTest
             : base(settings, metrics, cancellationToken)
         {
             this.senders = new List<Task>();
-            var serviceBusClient = new ServiceBusClient(settings.ConnectionString);
+            
+            ServiceBusClient serviceBusClient;
+            if (!string.IsNullOrWhiteSpace(settings.ServiceBusNamespace))
+            {
+                // Use Entra ID authentication with DefaultAzureCredential
+                serviceBusClient = new ServiceBusClient(settings.ServiceBusNamespace, new DefaultAzureCredential());
+            }
+            else
+            {
+                // Use connection string authentication
+                serviceBusClient = new ServiceBusClient(settings.ConnectionString);
+            }
+            
             sender = serviceBusClient.CreateSender(settings.SendPath);
             payload = new byte[settings.MessageSizeInBytes];
             this.sessionProvider = sessionProvider;
-
         }
 
         protected override Task OnOpenAsync()
@@ -159,6 +171,7 @@ namespace ThroughputTest
         private async Task HandleExceptions(DynamicSemaphoreSlim semaphore, SendMetrics sendMetrics, AggregateException ex)
         {
             bool wait = false;
+            Console.WriteLine($"SenderTask: Exception occurred: {ex.Message}");
             ex.Handle((x) =>
             {
                 if (x is ServiceBusException sbException)
