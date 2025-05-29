@@ -1,189 +1,319 @@
 ﻿# Azure Service Bus Throughput Performance Test
 
-This code sample illustrates the available throughput performance options for Azure Service Bus clients 
-and also allows for running experiments that dynamically adjust some tuning parameters. 
+This code sample illustrates the available throughput performance options for Azure Service Bus clients
+and also allows for running experiments that dynamically adjust some tuning parameters.
 
 > This tool is meant to be used with Azure Service Bus Premium and not with Azure Service Bus Standard.
-> Azure Service Bus Premium is designed to provide predictable performance, meaning that the results 
-> you measure with this tool are representative of the performance you can expect for your applications. 
+> Azure Service Bus Premium is designed to provide predictable performance, meaning that the results
+> you measure with this tool are representative of the performance you can expect for your applications.
 
-The sample assumes that you are generally familiar with the Service Bus .NET SDK and with how to set up 
-namespaces and entities within those namespaces. 
+The sample assumes that you are generally familiar with the Service Bus .NET SDK and with how to set up
+namespaces and entities within those namespaces.
 
 The sample can either send and receive messages from a single instance, or just act as either sender or receiver,
-allowing simulation of different scenarios. 
+allowing simulation of different scenarios.
 
-The sending side supports sending messages singly or in batches, and it supports pipelining of send operations 
-whereby up to a certain number of messages are kept in flight and their acknowledgement is handled asynchronously. 
+The sending side supports sending messages singly or in batches, and it supports pipelining of send operations
+whereby up to a certain number of messages are kept in flight and their acknowledgement is handled asynchronously.
 You can start one or multiple concurrent senders, and each sender can be throttled by imposing a pause between
 individual send operations.
 
-The receive side supports the "ReceiveAndDelete" and "PeekLock" receive modes, one or multiple concurrent 
+The receive side supports the "ReceiveAndDelete" and "PeekLock" receive modes, one or multiple concurrent
 receive loops, single or batch receive operations, and single or batch completion. You can simulate having
 multiple concurrent handlers on a receiver and you can also impose a delay to simulate work.
 
 ## What to expect
 
-This sample is specifically designed to test throughput limits of queues and topics/subscriptions in Service Bus 
-namespaces. It does not measure end-to-end latency, meaning how fast messages can pass through Service Bus under 
-optimal conditions. The goals of achieving maximum throughput and the lowest end-to-end latency are fundamentally 
-at odds, as you might know first-hand from driving a car. Either you can go fast on a street with light traffic, or 
-the street can handle a maximum capacity of cars at the same time, but at the cost of individual speed. 
-The goal of this sample is to find out where the capacity limits are. 
+This sample is specifically designed to test throughput limits of queues and topics/subscriptions in Service Bus
+namespaces. It does not measure end-to-end latency, meaning how fast messages can pass through Service Bus under
+optimal conditions. The goals of achieving maximum throughput and the lowest end-to-end latency are fundamentally
+at odds, as you might know first-hand from driving a car. Either you can go fast on a street with light traffic, or
+the street can handle a maximum capacity of cars at the same time, but at the cost of individual speed.
+The goal of this sample is to find out where the capacity limits are.
 
-As discussed in the [product documentation](https://docs.microsoft.com/azure/service-bus-messaging/message-transfers-locks-settlement), 
+As discussed in the [product documentation](https://docs.microsoft.com/azure/service-bus-messaging/message-transfers-locks-settlement),
 network latency has very significant impact on the achievable throughput. If you are running this sample from your
-development workstation, throughput will be substantially lower than from within an Azure VM. If you want to 
-test limits for a scenario where the Service Bus client will reside inside Azure, you should also run this test 
-inside Azure on a Windows or Linux VM that resides within the same region as the Service Bus namespace you 
+development workstation, throughput will be substantially lower than from within an Azure VM. If you want to
+test limits for a scenario where the Service Bus client will reside inside Azure, you should also run this test
+inside Azure on a Windows or Linux VM that resides within the same region as the Service Bus namespace you
 want to test.
 
 In an in-region setup, and with ideal parameters, you can achieve send rates exceeding 20000 msg/sec at 1024 bytes per message
 from a single client, meaning that a 1GB queue will fill up in under a minute. Also be aware that receive operations are
-generally more costly and therefore slower than send operations, which means that a test with maximum send 
-pressure (several senders using batching) may not be sustainable for longer periods because the receivers might not be 
+generally more costly and therefore slower than send operations, which means that a test with maximum send
+pressure (several senders using batching) may not be sustainable for longer periods because the receivers might not be
 able to keep up.
 
 ## Building the Tool
 
-The tool is a .NET Core project that can produce standalone executables for Linux and Windows, whereby we'll assume x64 targets. 
+The tool is a .NET Core project that can produce standalone executables for Linux and Windows, whereby we'll assume x64 targets.
 
-For Linux, with the .NET Core 3.0 SDK installed, run: 
+For Linux, with the .NET Core 3.0 SDK installed, run:
 
 ```
 	dotnet publish -c Release -f netcoreapp3.0 -r linux-x64
 ```
-The output application can be found in the ```bin/Release/netcoreapp3.0/linux-x64/publish```subdirectory.
+
+The output application can be found in the `bin/Release/netcoreapp3.0/linux-x64/publish`subdirectory.
 
 For Windows, run:
 
 ```
 	dotnet publish -c Release -f netcoreapp3.0 -r win-x64
 ```
-The output application can be found in the ```bin\Release\netcoreapp3.0\win-x64\publish```subdirectory.
+
+The output application can be found in the `bin\Release\netcoreapp3.0\win-x64\publish`subdirectory.
 
 ## Running the Tool
 
-You can run the tool locally from your own machine or you can run it from within an Azure VM. You should run the 
+You can run the tool locally from your own machine or you can run it from within an Azure VM. You should run the
 tool on the platform you are targeting, because performance differs between Linux and Windows due to their different
-I/O architectures and different implementation of the platform layer in .NET Core.  
+I/O architectures and different implementation of the platform layer in .NET Core.
 
-The only required command line arguments are a connection string and a send path. If the connection string includes 
+The only required command line arguments are a connection string and a send path. If the connection string includes
 an EntityPath property for a queue, the send path can be omitted. If the receive path is not given, the tool assumes
-the send path and the receive path to be the same, which is sufficient for queues. For topics, the subscription(s) must 
+the send path and the receive path to be the same, which is sufficient for queues. For topics, the subscription(s) must
 be given with explicit receive path options.
 
-You can test any valid Service Bus topology with this tool, including Topics with subscriptions and chained 
-entities with auto-forward set up between them. Therefore, the send path and the receive path do not have to be 
-on the same entity. You can also receive from dead-letter queues. 
+You can test any valid Service Bus topology with this tool, including Topics with subscriptions and chained
+entities with auto-forward set up between them. Therefore, the send path and the receive path do not have to be
+on the same entity. You can also receive from dead-letter queues.
 
-| Scenario                     | Arguments                                                                     |
-|------------------------------|-------------------------------------------------------------------------------|
-| Send to and receive from a queue |```ThroughputTest -C {connection-string} -S myQueueName ```          |
-| Send to a topic and receive from a subscription | ``` ThroughputTest -C {connection-string} -S myTopicName -R myTopicName/subscriptions/mySubName ``` |
-| Send to a topic and receive from two subscriptions | ``` ThroughputTest -C {connection-string} -S myTopicName -R myTopicName/subscriptions/mySubNameA myTopicName/subscriptions/mySubNameB ``` |
-| Send a queue |```ThroughputTest -C {connection-string} -S myQueueName -r 0 ```          |
-| Receive from a queue |```ThroughputTest -C {connection-string} -S myQueueName -s 0 ```          |
+| Scenario                                           | Arguments                                                                                                                           |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Send to and receive from a queue                   | `ThroughputTest -C {connection-string} -S myQueueName `                                                                             |
+| Send to a topic and receive from a subscription    | `ThroughputTest -C {connection-string} -S myTopicName -R myTopicName/subscriptions/mySubName`                                       |
+| Send to a topic and receive from two subscriptions | `ThroughputTest -C {connection-string} -S myTopicName -R myTopicName/subscriptions/mySubNameA myTopicName/subscriptions/mySubNameB` |
+| Send a queue                                       | `ThroughputTest -C {connection-string} -S myQueueName -r 0 `                                                                        |
+| Receive from a queue                               | `ThroughputTest -C {connection-string} -S myQueueName -s 0 `                                                                        |
 
 ## Output
 
 The tool prints out interleaved statistics for sends and receives. Send information is prefixed with S (and in yellow),
 receive information is prefixed with R and printed in cyan. The columns are separated with the pipe symbol and therefore
-parseable. 
+parseable.
 
 ### Send output columns
 
-| Column   | Description
-|----------|---------------------------------------------------------------------------
-| pstart   | Begin of the data recording for this row (seconds from start of run)
-| pend     | End of data recording for this row
-| sbc      | Send batch count
-| mifs     | Max inflight sends
-| snd.avg  | Average send duration (to acknowledgement receipt) in milliseconds
-| snd.med  | Median send duration
-| snd.dev  | Standard deviation for send duration
-| snd.min  | Minimum send duration
-| snd.max  | Maximum send duration
-| gld.avg  | Average gate lock duration in milliseconds. This measure tracks whether the internal async thread pool queue gets backed up. If this value shoots up, you should reduce the number of concurrent inflight sends, because the application sends more than what can be put on the wire. 
-| gld.med  | Median gate lock duration
-| gld.dev  | Standard deviation for gate lock duration
-| gld.min  | Minimum gate lock duration
-| gld.max  | Maximum gate lock duration
-| msg/s    | Throughput in messages per second 
-| total    | Total messages sent in this period
-| sndop    | Total send operations in this period 
-| errs     | Errors
-| busy     | Busy errors
-| overall  | Total messages sent in this run
+| Column  | Description                                                                                                                                                                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pstart  | Begin of the data recording for this row (seconds from start of run)                                                                                                                                                                                                                  |
+| pend    | End of data recording for this row                                                                                                                                                                                                                                                    |
+| sbc     | Send batch count                                                                                                                                                                                                                                                                      |
+| mifs    | Max inflight sends                                                                                                                                                                                                                                                                    |
+| snd.avg | Average send duration (to acknowledgement receipt) in milliseconds                                                                                                                                                                                                                    |
+| snd.med | Median send duration                                                                                                                                                                                                                                                                  |
+| snd.dev | Standard deviation for send duration                                                                                                                                                                                                                                                  |
+| snd.min | Minimum send duration                                                                                                                                                                                                                                                                 |
+| snd.max | Maximum send duration                                                                                                                                                                                                                                                                 |
+| gld.avg | Average gate lock duration in milliseconds. This measure tracks whether the internal async thread pool queue gets backed up. If this value shoots up, you should reduce the number of concurrent inflight sends, because the application sends more than what can be put on the wire. |
+| gld.med | Median gate lock duration                                                                                                                                                                                                                                                             |
+| gld.dev | Standard deviation for gate lock duration                                                                                                                                                                                                                                             |
+| gld.min | Minimum gate lock duration                                                                                                                                                                                                                                                            |
+| gld.max | Maximum gate lock duration                                                                                                                                                                                                                                                            |
+| msg/s   | Throughput in messages per second                                                                                                                                                                                                                                                     |
+| total   | Total messages sent in this period                                                                                                                                                                                                                                                    |
+| sndop   | Total send operations in this period                                                                                                                                                                                                                                                  |
+| errs    | Errors                                                                                                                                                                                                                                                                                |
+| busy    | Busy errors                                                                                                                                                                                                                                                                           |
+| overall | Total messages sent in this run                                                                                                                                                                                                                                                       |
 
-### Receive output columns 
+### Receive output columns
 
-| Column   | Description
-|----------|---------------------------------------------------------------------------
-| pstart   | Begin of the data recording for this row (seconds from start of run)
-| pend     | End of data recording for this row
-| rbc      | Receive batch count
-| mifr     | Max inflight receives
-| rcv.avg  | Average receive duration (to message receipt) in milliseconds
-| rcv.med  | Median receive duration
-| rcv.dev  | Standard deviation for receive duration
-| rcv.min  | Minimum receive duration
-| rcv.max  | Maximum receive duration
-| cpl.avg  | Average completion duration in milliseconds. 
-| cpl.med  | Median completion duration
-| cpl.dev  | Standard deviation for completion duration
-| cpl.min  | Minimum completion duration
-| cpl.max  | Maximum completion duration
-| msg/s    | Throughput in messages per second 
-| total    | Total messages received in this period
-| rcvop    | Total receive operations in this period 
-| errs     | Errors
-| busy     | Busy errors
-| overall  | Total messages sent in this run
+| Column  | Description                                                          |
+| ------- | -------------------------------------------------------------------- |
+| pstart  | Begin of the data recording for this row (seconds from start of run) |
+| pend    | End of data recording for this row                                   |
+| rbc     | Receive batch count                                                  |
+| mifr    | Max inflight receives                                                |
+| rcv.avg | Average receive duration (to message receipt) in milliseconds        |
+| rcv.med | Median receive duration                                              |
+| rcv.dev | Standard deviation for receive duration                              |
+| rcv.min | Minimum receive duration                                             |
+| rcv.max | Maximum receive duration                                             |
+| cpl.avg | Average completion duration in milliseconds.                         |
+| cpl.med | Median completion duration                                           |
+| cpl.dev | Standard deviation for completion duration                           |
+| cpl.min | Minimum completion duration                                          |
+| cpl.max | Maximum completion duration                                          |
+| msg/s   | Throughput in messages per second                                    |
+| total   | Total messages received in this period                               |
+| rcvop   | Total receive operations in this period                              |
+| errs    | Errors                                                               |
+| busy    | Busy errors                                                          |
+| overall | Total messages sent in this run                                      |
 
+## Options
 
-## Options 
-
-When only called with a connection string and send/receive paths, the tool will concurrently send and receive messages 
+When only called with a connection string and send/receive paths, the tool will concurrently send and receive messages
 to/from the chosen Service Bus entity.
 
 If you just want to send messages, set the receiver count to zero with **-r 0**. If you only want to receive messages,
-set the sender count to zero with **-s 0**. 
+set the sender count to zero with **-s 0**.
 
-The biggest throughput boosts yield the enabling of send and receive batching, meaning the sending and receiving of 
+The biggest throughput boosts yield the enabling of send and receive batching, meaning the sending and receiving of
 several messages in one operation. This oprtion will maximize throughput and show you the practical limits, but you
 should always keep an eye on whether batching is a practical approach for your specific solution.
 
 The "inflight-sends" and "inflight-receives" options also have very significant throughput impact. "inflight-sends"
-tracks how many messages are being sent asynchronously and in a pipelined fashion while waiting for the operations 
-to complete. The "inflight-receives" option controls how many messages are being received and processed concurrently. 
+tracks how many messages are being sent asynchronously and in a pipelined fashion while waiting for the operations
+to complete. The "inflight-receives" option controls how many messages are being received and processed concurrently.
 
 The further options are listed below:
 
-| Parameter                     | Description                                                                   
-|-------------------------------|-------------------------------------------------------------------------------
-|  **-C, --connection-string**  |  **Required**. Connection string                                              
-|  -S, --send-path              |  Send path. Queue or topic name, unless set in connection string EntityPath.  
-|  -R, --receive-paths          |  Receive paths. Mandatory for receiving from topic subscriptions. Must be {topic}/subscriptions/{subscription-name} or {queue-name}
-|  -n, --number-of-messages     |  Number of messages to send (default 1000000)
-|  -b, --message-size-bytes     |  Bytes per message (default 1024)
-|  -f, --frequency-metrics      |  Frequency of metrics display (seconds, default 10s)
-|  -m, --receive-mode           |  Receive mode.'PeekLock' (default) or 'ReceiveAndDelete'
-|  -r, --receiver-count         |  Number of concurrent receivers (default 1)
-|  -e, --prefetch-count         |  Prefetch count (default 0)
-|  -t, --send-batch-count       |  Number of messages per batch (default 0, no batching)
-|  -s, --sender-count           |  Number of concurrent senders (default 1)
-|  -d, --send-delay             |  Delay between sends of any sender (milliseconds, default 0)
-|  -i, --inflight-sends         |  Maximum numbers of concurrent in-flight send operations (default 1)
-|  -j, --inflight-receives      |  Maximum number of concurrent in-flight receive operations per receiver (default 1)
-| -v, --receive-batch-count     |  Max number of messages per batch (default 0, no batching)
-|  -w, --receive-work-duration  |  Work simulation delay between receive and completion (milliseconds, default 0, no work)
+| Parameter                   | Description                                                                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **-C, --connection-string** | **Required**. Connection string                                                                                                    |
+| -S, --send-path             | Send path. Queue or topic name, unless set in connection string EntityPath.                                                        |
+| -R, --receive-paths         | Receive paths. Mandatory for receiving from topic subscriptions. Must be {topic}/subscriptions/{subscription-name} or {queue-name} |
+| -n, --number-of-messages    | Number of messages to send (default 1000000)                                                                                       |
+| -b, --message-size-bytes    | Bytes per message (default 1024)                                                                                                   |
+| -f, --frequency-metrics     | Frequency of metrics display (seconds, default 10s)                                                                                |
+| -m, --receive-mode          | Receive mode.'PeekLock' (default) or 'ReceiveAndDelete'                                                                            |
+| -r, --receiver-count        | Number of concurrent receivers (default 1)                                                                                         |
+| -e, --prefetch-count        | Prefetch count (default 0)                                                                                                         |
+| -t, --send-batch-count      | Number of messages per batch (default 0, no batching)                                                                              |
+| -s, --sender-count          | Number of concurrent senders (default 1)                                                                                           |
+| -d, --send-delay            | Delay between sends of any sender (milliseconds, default 0)                                                                        |
+| -i, --inflight-sends        | Maximum numbers of concurrent in-flight send operations (default 1)                                                                |
+| -j, --inflight-receives     | Maximum number of concurrent in-flight receive operations per receiver (default 1)                                                 |
+| -v, --receive-batch-count   | Max number of messages per batch (default 0, no batching)                                                                          |
+| -w, --receive-work-duration | Work simulation delay between receive and completion (milliseconds, default 0, no work)                                            |
 
+## Docker Support
 
- 
+This project includes Docker support for containerized performance testing. The Docker image is optimized for .NET 8 and includes all necessary dependencies.
 
+### Building the Docker Image
 
+```bash
+# Build the Docker image
+docker build -t throughput-test .
 
+# Build and tag for Azure Container Registry
+docker build -t <your-acr-name>.azurecr.io/throughput-test:latest .
+```
 
+### Running Locally with Docker
 
+```bash
+# Run with connection string
+docker run throughput-test --connection-string "your-connection-string" --number-of-messages 1000
 
+# Run with Entra ID authentication
+docker run throughput-test --sb-namespace "<your-namespace>.servicebus.windows.net" --send-path "your-queue" --number-of-messages 1000
+```
+
+### Pushing to Azure Container Registry
+
+```bash
+# Login to Azure and ACR
+az login
+az acr login --name <your-acr-name>
+
+# Tag and push the image
+docker tag throughput-test <your-acr-name>.azurecr.io/throughput-test:latest
+docker push <your-acr-name>.azurecr.io/throughput-test:latest
+
+# Alternative: Build and push directly
+az acr build --registry <your-acr-name> --image throughput-test:latest .
+```
+
+## Azure Container Instance Deployment
+
+### Single Container with Session Testing
+
+Deploy a single container instance for comprehensive session-based performance testing:
+
+```bash
+az container create \
+    --resource-group <your-resource-group> \
+    --name throughput-test \
+    --image <your-acr-name>.azurecr.io/throughput-test:latest \
+    --assign-identity \
+    --registry-login-server <your-acr-name>.azurecr.io \
+    --registry-username <your-acr-name> \
+    --registry-password $(az acr credential show --name <your-acr-name> --query "passwords[0].value" --output tsv) \
+    --os-type Linux \
+    --cpu 1 \
+    --memory 1.5 \
+    --restart-policy Never \
+    --command-line "dotnet ThroughputTest.dll -N <your-namespace>.servicebus.windows.net -S <your-queue> -n 100 -x 5 -s 1 -r -1 -j 5 -z 15000"
+```
+
+### Separate Sender and Receiver Containers
+
+For more granular testing, deploy separate sender and receiver containers:
+
+#### Sender Container
+
+```bash
+az container create \
+    --resource-group <your-resource-group> \
+    --name sender-test \
+    --image <your-acr-name>.azurecr.io/throughput-test:latest \
+    --registry-login-server <your-acr-name>.azurecr.io \
+    --registry-username <your-acr-name> \
+    --registry-password $(az acr credential show --name <your-acr-name> --query "passwords[0].value" --output tsv) \
+    --os-type Linux \
+    --cpu 1 \
+    --memory 1.5 \
+    --restart-policy Never \
+    --command-line "dotnet ThroughputTest.dll -N <your-namespace>.servicebus.windows.net -S <your-queue> -n 100 -x 5 -s 1 -r 0"
+```
+
+#### Receiver Container
+
+```bash
+az container create \
+    --resource-group <your-resource-group> \
+    --name receiver-test \
+    --image <your-acr-name>.azurecr.io/throughput-test:latest \
+    --registry-login-server <your-acr-name>.azurecr.io \
+    --registry-username <your-acr-name> \
+    --registry-password $(az acr credential show --name <your-acr-name> --query "passwords[0].value" --output tsv) \
+    --os-type Linux \
+    --cpu 1 \
+    --memory 1.5 \
+    --restart-policy Never \
+    --command-line "dotnet ThroughputTest.dll -N <your-namespace>.servicebus.windows.net -S <your-queue> -n 0 -x 5 -s 0 -r -1 -j 5 -z 15000"
+```
+
+### Monitoring Container Instances
+
+```bash
+# Check container status
+az container show --resource-group <your-resource-group> --name throughput-test --query "instanceView.state"
+
+# View logs in real-time
+az container logs --resource-group <your-resource-group> --name throughput-test --follow
+
+# View logs for specific containers
+az container logs --resource-group <your-resource-group> --name sender-test
+az container logs --resource-group <your-resource-group> --name receiver-test
+
+# Delete containers when done
+az container delete --resource-group <your-resource-group> --name throughput-test --yes
+```
+
+### Container Command Parameters
+
+The container examples above use these key parameters for session-based testing:
+
+- `-N <your-namespace>.servicebus.windows.net` - Service Bus namespace (Entra ID authentication)
+- `-S <your-queue>` - Queue name for sending/receiving messages
+- `-n 100` - Number of messages to send (0 = receiver only mode)
+- `-x 5` - Number of sessions to use for session-enabled entities
+- `-s 1` - Number of concurrent senders (0 = disable sending)
+- `-r -1` - Number of receivers (-1 = processor mode, 0 = disable receiving)
+- `-j 5` - Maximum concurrent in-flight receive operations per receiver
+- `-z 15000` - Session state size in bytes (15KB) to test session state features
+
+### Prerequisites for Container Deployment
+
+- Azure CLI installed and authenticated (`az login`)
+- Access to Azure Container Registry with push/pull permissions
+- Azure Service Bus namespace with appropriate RBAC permissions for Entra ID authentication
+- Valid Azure resource group for container deployment
+
+For connection string authentication instead of Entra ID, replace the `-N` parameter with `-C` and provide your full Service Bus connection string.
