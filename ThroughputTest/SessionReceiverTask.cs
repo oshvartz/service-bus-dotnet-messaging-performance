@@ -128,7 +128,7 @@ namespace ThroughputTest
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error receiving messages from session {path}: {ex.Message}");
+
                         // receiveMetrics.ReceiveDuration100ns = sw.ElapsedTicks - nsec;
                         if (ex is ServiceBusException sbException && sbException.Reason == ServiceBusFailureReason.ServiceBusy)
                         {

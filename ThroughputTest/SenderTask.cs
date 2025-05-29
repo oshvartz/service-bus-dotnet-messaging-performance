@@ -171,7 +171,6 @@ namespace ThroughputTest
         private async Task HandleExceptions(DynamicSemaphoreSlim semaphore, SendMetrics sendMetrics, AggregateException ex)
         {
             bool wait = false;
-            Console.WriteLine($"SenderTask: Exception occurred: {ex.Message}");
             ex.Handle((x) =>
             {
                 if (x is ServiceBusException sbException)
